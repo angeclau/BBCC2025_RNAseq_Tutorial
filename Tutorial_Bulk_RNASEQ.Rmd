@@ -1,0 +1,671 @@
+---
+title: "BBCC2025 Tutorial: Introductory bulk RNA-seq analysis in R:"
+subtitle: "From raw counts to biological interpretation."
+author: "| \n| Claudia Angelini \n|\n| Istituto per le Applicazioni del Calcolo \"M.
+  Picone\"\n| Consiglio Nazionale delle Ricerche\n"
+date: "2025-12-03"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## INTRODUCTION
+
+(Bulk) RNA sequencing (RNA-seq) is a high-throughput technique used to quantify the RNA molecules present in a biological sample at the gene-wide scale. 
+By capturing and sequencing RNA at a specific time point and under a particular condition, bulk RNA-seq provides a comprehensive snapshot of transcriptional activity, allowing researchers to investigate cellular states, molecular responses, and regulatory mechanisms with high sensitivity and accuracy. 
+It aims to answer questions like:
+
+- Which genes are active?
+- How much is each gene expressed?
+- How does gene expression change between conditions (e.g., healthy vs. diseased, treated vs. untreated)?
+- Which biological pathways are involved, activated, or deactivated by the treatment, or affected by the experimental condition? 
+
+A bulk RNA-seq experiment typically begins with RNA extraction from biological samples, followed by enrichment of relevant RNA species and conversion to complementary DNA (cDNA). We use the term bulk RNA-seq experiment to distinguish it from single-cell RNA-seq experiments. In the first, gene expression is averaged across pools of cells (usually several thousand), whereas in the latter, it is observed for each cell. However, when it is clear from the context, we might omit the word 'bulk'.
+
+Sequencing libraries are then generated and processed on high-throughput platforms such as Illumina, producing millions of short reads. These sequencing reads undergo computational processing to assess quality, align to a reference genome or transcriptome, and quantify the abundance of each gene or transcript. The resulting data include raw sequence reads, alignment files, gene-level count matrices, and normalized expression values.
+
+Ultimately, bulk RNA-seq produces quantitative data on gene expression averaged across many cells and enables downstream analyses such as differential gene expression, pathway and functional enrichment, and comparative transcriptomics across conditions, treatments, developmental stages, or disease states. Moreover, bulk RNA-seq data can be used to train machine learning models to address more complex questions, such as disease classification, patient stratification, and survival analysis.
+Through these applications, RNA-seq has become an essential tool in functional genomics, molecular biology, and biomedical research.
+
+## THE RNA-SEQ DATA 
+
+The primary output from a sequencer consists of millions of short reads (e.g., 50–150 bases) plus quality scores. Short reads are small DNA fragments sequenced from RNA-derived cDNA, representing pieces of transcripts that, when assembled or mapped, reveal how much each gene is expressed in the sample. Such reads are stored in FASTQ files.
+
+For each sample, you usually have one or two FASTQ files containing the sequences, depending on the library. There are two main library types:  
+
+- **Paired-end reads**: two FASTQ files per sample (usually denoted as R1 and R2)
+- **Single-end reads**: one FASTQ file per sample.
+
+
+A bulk RNA-seq experiment usually involves collecting data from several samples in two or more experimental conditions. 
+The analysis requires setting up computational pipelines. 
+
+
+## GENERAL OVERVIEW OF THE RNA-SEQ COMPUTATIONAL WORKFLOW  
+
+The analysis workflow of bulk RNA-seq experiments consists of a series of steps:
+
+ 1. Quality control (QC) of raw sequencing reads (i.e., **Fastq files** and **sample metadata**). 
+ 2. Filtering, trimming, adapter removal, and other sequence processing $\Rightarrow$  Fastq files.
+ 3. Alignment to a reference genome or to transcripts $\Rightarrow$ typical output is SAM/BAM alignment files.
+ 4. Gene-level quantification or Isoform-level quantification  $\Rightarrow$  typical output is a **raw count matrix**. 
+ 5. Quality control, Normalization, Batch correction  
+ 6. Differential Expression (DE) Analysis.
+ 7. Functional Enrichment and Pathway Analysis.
+8. Other post-processing analysis, such as Clustering, Machine learning algorithms, etc. 
+
+Running the entire workflow is typically computationally intensive and requires combining different tools, written in various languages and environments. In particular, steps  1-4 refer to the main pre-processing, steps 5-6 to the primary statistical analysis, and steps 7-8 to other downstream analysis. 
+
+**This tutorial is entirely based on the R language** and covers steps 5, 6, and 7 of the workflow above, assuming a gene expression count matrix and the corresponding sample metadata are available. In particular, we will use **DESeq2** (*Love, Huber, and Anders 2014*,https://doi.org/10.1186/s13059-014-0550-8)  for differential expression analysis, which is one of the most popular and robust methods for RNA-seq analysis.
+
+For more information about the DESeq2 analysis, see https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
+## INSTALL AND LOAD THE R PACKAGES
+
+1.	Install R (https://www.r-project.org).
+2.	R Studio (https://posit.co/download/rstudio-desktop/).
+3.  Install the following R packages (listed below).
+4.  Load the packages in the R environment.
+
+```{r, echo=TRUE,message=FALSE,warning=FALSE}
+# Load libraries
+  library(airway) ## For the example dataset
+  library(ggplot2)
+  library(dplyr)
+  library(pheatmap)
+  library(RColorBrewer)
+  library(DESeq2)
+  library(AnnotationDbi)
+  library(org.Hs.eg.db)
+  library(clusterProfiler)
+  library(apeglm)
+  library(msigdbr)
+```
+
+## READ THE DATA
+
+For this tutorial, we will assume that you have obtained a **read count matrix** from raw fastq reads obtained from an Illumina sequencing run or another high-throughput sequencing experiment.
+
+- A **read count matrix** **X** contains un-normalized counts, where the value in the $i$-th row and the $j$-th column of the matrix tells how many reads (or fragments, for paired-end RNA-seq) can be assigned to gene $i$ in sample $j$. 
+
+- Moreover, to proceed with the analysis, you also need a **sample metadata table** with sample IDs, condition, batch, etc., that describes the experimental design. 
+
+Raw count data can be easily downloaded from the NCBI Gene Expression Omnibus (GEO), Sequence Read Archive (SRA), or other public repositories, provided an accession number is available. Alternatively, you can obtain novel experimental data after suitable preprocessing.
+
+To download RNA-seq data from GEO in R, you can use the **GEOquery** Bioconductor package to access processed count data. In fact, many GEO submissions for RNA-seq data include a processed gene count matrix as a supplementary file, which is ideal for immediate differential gene expression analysis. In such cases, you can use the *getGEO()* function to retrieve both the raw count matrix and metadata. The *getGEO()* function downloads the data and creates an **ExpressionSet** object in the standard Bioconductor format. The function *exprs()* extracts the counts; the function *pData()* extracts sample metadata.
+
+SRA stores the raw sequence data. Downloading sequences from SRA usually involves command-line tools (like the **SRA Toolkit**) outside of R.
+
+There are other online data repositories, such as **recount3**, which is an online resource containing RNA-seq gene, exon, and exon-exon junction counts, as well as coverage bigWig files for more than 10.000 studies in human and mouse. There are also specific repositories, such as the Genomic Data Commons (GDC), TGCA, and Linkedomics, among others. For many of these repositories, specific R packages are available for downloading the data in R.
+
+For this illustrative example, the **count data** and **metadata** are available directly from the R package **airway**.
+
+The study examined four primary human airway smooth muscle cell lines treated with 1 micromolar dexamethasone for 18 hours, with both treated and untreated samples for each cell line. It consists of  4 cell lines × 2 conditions (treated/untreated) = 8 samples.
+
+```{r, echo=TRUE}
+# Dataset: Human airway smooth muscle cells treated with dexamethasone
+# Study: Glucocorticoid effects on asthma-related gene expression
+# Reference: Himes et al., PLoS ONE, 2014
+# GEO Accession: GSE52778
+# Samples: 4 cell lines × 2 conditions (treated/untreated) = 8 samples
+# Organism: Homo sapiens (Human)
+
+data("airway")
+print(airway)
+
+# Extract count matrix 
+countData <- assay(airway)
+head(countData)
+dim(countData) 
+
+# Extract sample information
+colData <- colData(airway)
+head(colData)
+
+## select the metadata of interest
+colData<-as.data.frame(colData[, c("SampleName","cell", "dex")]) 
+```
+
+
+In this example, 
+
+- the object **countData** contains the raw counts. In our case, it contains 63677 genes across eight samples. 
+
+- the object **colData** contains the sample metadata. In our case, it contains the information about the eight samples. 
+
+
+##  CREATE DESeq2 OBJECT and DEFINE THE DESIGN FORMULA 
+
+To create the **DESeqDataSet** object, we will need 
+- the **count matrix**, 
+- the **metadata** table 
+as input. 
+Moreover, 
+- We will also need to specify a **design formula**. 
+
+The **design formula** is a mathematical formula, such as *~ condition* or *~ treatment + genotype*, that you must provide to define the variables for the statistical model. 
+
+The **design matrix** (as in regression models) is the numerical matrix automatically generated from this formula, which specifies how to group the samples and identify coefficients for each factor of interest. More generally, a design formula instructs statistical software on the known sources of variation to control for, as well as the factor of interest to test in differential expression analyses. The last factor entered in the formula should be the condition of interest.
+
+There are different ways to define a design formula.
+ 
+- Example (Single factor): *~ condition*: Analyzes the difference between groups defined by the condition variable. The condition variable can have two or more levels.
+- Example (Two factors): * ~ treatment + genotype* : Analyzes the main effects of treatment and genotype separately. While * ~ treatment * genotype*: Includes also the interaction effect.
+- Example (batch correction): *~ batch + condition*: Analyzes the difference between groups defined by the condition variable while correcting for some batch variables.
+
+More complex formulas can be defined for experiments involving multiple factors.  
+For more information you can look at *Law et al 2020* (https://doi.org/10.12688/f1000research.27893.1).
+
+
+### Define the design matrix or formula:
+ 
+For the airway experiment,  you can use two different design formulas: *design= ~ cell + dex* or *design= ~ dex*.
+
+Both formulas allow testing the dexamethasone effect (i.e., treated versus untreated), with or without controlling for cell lines. 
+ 
+- When using *design= ~ dex*, you assume the experiment has exactly two conditions (e.g., treated vs untreated) and that the cell type is not relevant. In this case, you can create a simple sample metadata table with a column dex containing the two levels of the condition.
+ 
+- When using *design= ~ cell + dex*, you assume the experiment has two conditions (e.g., treated vs untreated), but you want to correct for the cell type. In this case, the sample metadata table must have a column named *cell* containing the cell type and a column named *dex* containing the two levels of the condition.
+ 
+Note that, by default, R will choose a reference level for factors based on alphabetical order. However, you can specify the reference level using the *relevel()* function.
+
+### Create and extract information from a DESeqDataSet object
+ 
+The **DESeqDataSet** object contains all information about the experimental setup, read counts, and design formulas. Let *dds* be a DESeqDataSet object; the following functions can be used to access this information separately:
+
+- *rownames(dds)* shows which features are used in the study (e.g., genes),
+- *colnames(dds)* displays the studied samples,
+- *counts(dds)* displays the count table, and
+- *colData(dds)* displays the experimental setup (i.e., the metadata associated with the samples).
+
+```{r,echo=TRUE}
+# set the reference level
+colData$dex <- relevel(colData$dex, ref = "untrt")  # Set untreated as reference
+## create the DESeqDataSet object
+dds <- DESeqDataSet(airway, design = ~  dex)
+dds
+```
+
+The dds object contains 63677 genes across 8 samples. Moreovere you can note that gene names are given as ENSEMBL IDs.
+
+### Filtering 
+ 
+Remove genes that have almost no or limited expression in any of the given samples. 
+
+```{r,echo=TRUE}
+## Filtering low expressed genes 
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+dds
+```
+
+After filtering for lowly expressed genes, we have 22369 genes in the dds object.
+
+## NORMALIZATION, QUALITY CONTROL AND VISUALIZATION 
+
+Normalization is necessary for bulk RNA-seq data to correct for technical variations, such as sequencing depth and library size, which can obscure true biological differences. It allows meaningful comparisons between samples by adjusting read counts to account for factors such as total RNA content, ensuring that observed differences are biological rather than technical artifacts. Without normalization, differences in sequencing depth could incorrectly suggest that a gene is up-regulated when it is not, leading to unreliable results. 
+
+
+In particular, when looking at raw RNA-seq count data, two important factors influence the observed values and need to be taken into account. 
+
+- The first factor is the sequencing depth or **library size**, that is, the total number of reads mapped to the genome. 
+
+```{r,echo=TRUE}
+# QC: Library sizes
+barplot(colSums(counts(dds)), las = 2, main = "Library Sizes")
+```
+
+The *estimateSizeFactors()* function allows estimating the library size.
+Then, normalized counts can be obtained using the Median of Ratios (RLE - Relative Log Expression) method.
+
+```{r,echo=TRUE}
+dds <- estimateSizeFactors(dds)
+sizeFactors(dds)
+
+normalized_counts<-counts(dds, normalized=TRUE)
+head(normalized_counts)
+
+```
+
+```{r,echo=TRUE}
+boxplot(log2(counts(dds)+1), main="Boxplot Raw data (log2(counts +1))", las=2)
+```
+
+```{r,echo=TRUE}
+boxplot(log2(normalized_counts+1), main="Boxplot Normalized data (RLE)  (log2(counts +1))", las=2)
+```
+
+
+- The second factor is the **gene length**, i.e., the number of bases covering a gene. It is expected that larger genes, for a given level of transcription, will have a higher number of gene counts. 
+
+In general, various other factors affect transcript quantification in RNA-seq data, including library preparation, sequencing runs, GC-content, and other batch-related variability. 
+
+There are three main RNA-seq quantification measures that you could consider:
+
+- **CPM**: Counts per million (CPM) mapped reads are the number of raw reads mapped to a transcript, scaled by the number of sequencing reads in your sample, multiplied by a million.
+
+
+- **FPKM/RPKM**: FPKM (fragments per kilobase of transcript per million fragments mapped) for paired-end data and RPKM (reads per kilobase of transcript per million reads mapped) for single-end data, correct for variations in library size and gene length 
+
+- **TPM**: Transcripts per million (TPM) represents the relative number of transcripts you would detect for a gene if you had sequenced one million full-length transcripts 
+
+To compute one of the above measures, you need information about the **gene length**. 
+ 
+We will not cover this part in this tutorial. 
+
+For this part, we suggest reading
+
+- The edgeR package: https://bioconductor.org/packages/release/bioc/html/edgeR.html
+- The EDAseq package: https://bioconductor.org/packages/release/bioc/html/EDASeq.html
+- The NOISeq package: https://www.bioconductor.org/packages/release/bioc/html/NOISeq.html
+
+More sophisticated approaches also include the removal of batch effects. 
+For this part, we suggest reading
+
+- The SVA package: https://bioconductor.org/packages/release/bioc/html/sva.html.
+- The RUVseq package: https://bioconductor.org/packages/release/bioc/html/RUVSeq.html. 
+
+
+### Other transformation (i.e., variance stabilizing transform and rlog)
+ 
+To test for differential expression, DESeq2 operates on raw counts and uses discrete distributions as described in the next section on differential expression. However, for other downstream analyses – e.g., visualization or clustering – it may be helpful to work with transformed count data and apply a suitable transformation.
+ 
+RNA-seq data are usually counts, modelled as a negative binomial distribution. For this type of data, the mean and dispersion are related, i.e., the dispersion depends on the mean. Therefore, they are a classic example of heteroscedasticity (i.e., non-equal variance). 
+
+This can be easily visualized estimating the disepersion and plotting the mean versus the dispersion.
+ 
+ 
+```{r, echo=TRUE}
+dds <- estimateDispersions(dds)
+plotDispEsts(dds)
+```
+ 
+The mean-dispersion plot in DESeq2, generated using *plotDispEsts()**, visualizes the dispersion (variance) of gene expression levels against the mean of normalized counts for each gene. The plot shows how DESeq2 shrinks the gene-wise dispersion estimates toward a fitted dispersion-mean curve (red line) to provide more accurate final estimates (blue dots), which is essential for reliable differential expression analysis. 
+ 
+The DESeq2 package contains two transformations: the variance-stabilizing transformation (vst) and the regularized log transformation (rlog).
+
+- **vst** fits dispersion-mean relation(s) and then transforms the count data (normalized by division by the size factors or normalization factors), yielding a matrix of values which are now approximately homoskedastic (having constant variance along the range of mean values). The transformation also normalizes with respect to library size. 
+
+- The **rlog** applies a 'regularized log' transformation. It transforms count data to the log2 scale to minimize differences between samples for rows with small counts and normalizes by library size.
+
+These transformations are useful for detecting outliers or as input to machine learning techniques such as clustering or linear discriminant analysis. 
+
+
+```{r,echo=TRUE}
+# Variance stabilization transform
+vsd <- vst(dds, blind = FALSE)
+# rlog
+rld <- rlog(dds)
+```
+
+- Note that, the vst is less sensitive to size factors, which can be an issue when size factors vary widely. 
+
+- Note that neither the **rlog** transformation nor the **VST** matrices are used by the differential expression estimation in DESeq2, which always uses the raw count data, through generalized linear modeling, which incorporates knowledge of the variance-mean dependence. Instead, the rlog transformation and VST are proposed as separate functionalities for visualization, clustering, and other machine learning tasks.
+
+
+### Visualization (e.g., PCA, sample distance matrix, etc)
+ 
+In the following explorative plots we will use the vst normalized counts.
+
+```{r,echo=TRUE}
+mat <- assay(vsd)
+# sample distance matrix
+sampleDists <- dist(t(mat)) ## matrix of dimension nsamples x nsamples with pairwise distances
+ 
+pheatmap(as.matrix(sampleDists), clustering_distance_rows=sampleDists, clustering_distance_cols=sampleDists, main="Distance Matrix")
+```
+
+
+```{r,echo=TRUE}
+pcaData <- plotPCA(vsd, intgroup = "dex", returnData = TRUE)
+
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+pca_plot <- ggplot(pcaData, aes(x = PC1, y = PC2, color = dex)) +
+  geom_point(size = 5) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  ggtitle("PCA: Dexamethasone Effect on Airway Dataset")
+
+print(pca_plot)
+```
+
+
+```{r, echo=TRUE}
+pca_plot_new <- ggplot(pcaData, aes(x = PC1, y = PC2, color = dex, shape=cell)) +
+  geom_point(size = 5) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  ggtitle("PCA: Dexamethasone Effect on Airway Dataset")
+
+print(pca_plot_new)
+```
+
+
+As you can see, the first principal component captures the treatment effect by distinguishing between treated and untreated samples. However, the second principal component captures the effect of the cell type.
+
+We might consider and correct for cell types in the differential expression analysis (see Exercises).
+
+## DIFFERENTIAL EXPRESSION ANALYSIS
+
+DESeq2 is a popular method for identifying differentially expressed genes from RNA-seq data.
+
+It models the raw gene expression counts using the **negative binomial distribution to account** for accounting the extra variability in sequencing data. 
+
+It performs normalization, dispersion estimation, and correction for batch or confounding variables (in provided in the formula). 
+
+It fits a Generalized Linear Model (GLM) to identify genes with significant expression changes associated with the factor of interest.
+It returns a table that includes the genes, their fold changes, p-values, and adjusted p-values.
+
+To run the differential expression analysis, we will use a single call to the function *DESeq()*. This function prints a message for each step it performs. Recall that DESeq2 does not use normalized counts; instead, it utilizes the raw counts and models the normalization within the GLM.
+
+In particular, the *DESeq()* function corrects for sequencing depth and overdispersion. 
+If you have already estimated size factors and dispersion, it will use the available estimates; otherwise, it will run the estimate before fitting the model. 
+Moreover, by providing a suitable design formula, it can correct for batch effects or other confounding variables.
+
+In our case, we have that the design formula includes only the treatment effect, therefore no cell type correction is applied (try the Exercise for correcting for cell types.). 
+
+```{r, echo=TRUE}
+# Run DESeq2 analysis
+dds <- DESeq(dds)
+```
+
+After fitting the model, we can explore the results and look and the contrast of interest.  A **contrast** is a specific comparison between sample groups to find differentially expressed genes.
+
+
+```{r, echo=TRUE}
+# Get results for dexamethasone effect
+res <- results(dds, contrast = c("dex", "trt", "untrt"))
+head(res)
+summary(res, alpha = 0.05)  #Display a brief summary
+```
+
+
+In this example, genes are written as ENSEMBL IDs. It can be helpful to add gene symbols and ENTREZ IDs. Several packages support converting gene IDs.
+Here, we use the *mapIds()* function from the **AnnotationDbi** packages.
+
+Among other useful conversion tools, we recall the *bitr()* function from the **clusterProfiler** package and the *getBM()* function from the **biomaRt** package.
+
+Note that not all ENSEMBL IDs have gene symbols and/or ENTRZID. Therefore, for some analyses, you should filter out observations with NA values. 
+
+```{r, echo=TRUE,warning=FALSE}
+# Add gene symbols and descriptions
+res$symbol <- mapIds(org.Hs.eg.db,
+                     keys = rownames(res),
+                     column = "SYMBOL",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+
+res$entrez <- mapIds(org.Hs.eg.db,
+                     keys = rownames(res),
+                     column = "ENTREZID",
+                     keytype = "ENSEMBL",
+                     multiVals = "first")
+```
+
+It is possible to order results by statistical significance and/or to extract a list of DE genes based on different criteria.
+
+```{r, echo=TRUE}
+# Order by adjusted p-value
+resOrdered <- res[order(res$padj), ]
+head(as.data.frame(resOrdered), 7)
+```
+
+In general, you can identify DE genes accorditi to some thresholds- 
+
+```{r, echo=TRUE}
+# Define thresholds
+alpha <- 0.05
+lfc_threshold <- 1
+
+# Filter significant genes according to padj and log_fc
+sig_genes <- subset(res, padj < alpha & abs(log2FoldChange) > lfc_threshold)
+sig_df <- as.data.frame(sig_genes)
+
+# Get moderately significant genes (padj < 0.05, any fold change)
+sig_genes_moderate <- subset(res, padj < alpha)
+```
+
+
+## RESULTS and VISUALIZATION 
+
+### MA Plot
+```{r,echo=TRUE}
+plotMA(res, ylim = c(-10, 10), alpha = 0.05,
+       main = "MA Plot: Treatment Effect",
+       colSig = "red", colLine = "grey40")
+```
+
+
+### Volcano Plot
+
+Convert DESeq2 result object into a data.frame
+
+```{r,echo=TRUE,warning=FALSE}
+res_df <- as.data.frame(res) # converts the object res into a dataframe
+
+res_df$diffexpressed <- "Not Significant"
+res_df$diffexpressed[res_df$log2FoldChange > lfc_threshold & 
+                       res_df$padj < alpha] <- "UP-regulated"
+res_df$diffexpressed[res_df$log2FoldChange < -lfc_threshold & 
+                       res_df$padj < alpha] <- "DOWN-regulated"
+```
+
+```{r,echo=TRUE,warning=FALSE}
+volcano <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj), 
+                              col = diffexpressed)) +
+  geom_point(alpha = 0.5, size = 1.5) +
+  scale_color_manual(values = c("blue", "grey", "red"),
+                     labels = c("Downregulated", "Not significant", "Upregulated"),
+                     name = "Expression") +
+  geom_vline(xintercept = c(-lfc_threshold, lfc_threshold), 
+             linetype = "dashed", col = "black", alpha = 0.5) +
+  geom_hline(yintercept = -log10(alpha), 
+             linetype = "dashed", col = "black", alpha = 0.5) +
+  labs(title = "Volcano Plot: Treated vs Untreated",
+       x = "Log2 Fold Change",
+       y = "-Log10 Adjusted P-value") 
+
+print(volcano)
+```
+
+### Heatmap
+
+```{r,echo=TRUE}
+select <- head(order(res$padj), 25) ## take the top 25 genes ordered by adjussted pvalues
+
+pheatmap(assay(vsd)[select, ], cluster_rows = TRUE, cluster_cols = TRUE,
+         show_rownames = TRUE, annotation_col = as.data.frame(colData(dds)[, "dex", drop=FALSE]))
+```
+
+### Shrinkage (optional)
+
+The shrunken log fold changes are useful for ranking and visualization, without the need for arbitrary filters on low-count genes. The normal prior can sometimes lead to excessive shrinkage in certain datasets. 
+
+DESeq2 provides thee shrinkage options:
+
+- **apeglm** is the adaptive t prior shrinkage estimator from the apeglm package (Zhu, Ibrahim, and Love 2018). As of version 1.28.0, it is the default estimator.
+- **ashr** is the adaptive shrinkage estimator from the ashr package (Stephens 2016). Here, DESeq2 uses the ashr option to fit a mixture of Normal distributions as the prior, with method="shrinkage".
+- **normal** is the original DESeq2 shrinkage estimator, an adaptive Normal distribution as prior.
+
+```{r, echo=TRUE,message=FALSE}
+resLFC <- lfcShrink(dds,  coef=2, type="apeglm")
+resNorm <- lfcShrink(dds,  coef=2, type="normal")
+resAsh <- lfcShrink(dds,   coef=2,type="ashr")
+
+par(mfrow=c(1,3), mar=c(4,4,2,1))
+xlim <- c(1,1e5); ylim <- c(-3,3)
+plotMA(resLFC, xlim=xlim, ylim=ylim, main="apeglm")
+plotMA(resNorm, xlim=xlim, ylim=ylim, main="normal")
+plotMA(resAsh, xlim=xlim, ylim=ylim, main="ashr")
+```
+
+
+### Exporting results to Tab delimited files
+
+A plain-text file of the results can be exported using the base R functions write.table, write.csv or write.delim. We suggest using a descriptive file name indicating the variable and levels which were tested.
+
+```{r}
+write.table(as.data.frame(resOrdered), 
+          file="condition_treated_vs_control_results.txt", quote = FALSE, sep = "\t", row.names = FALSE)
+```
+
+
+## PATHWAY ENRICHMENT ANALYSIS 
+
+There are at least two broad categories of methods:
+
+- **Over-Representation Analysis (ORA)**:  It uses a list of DE genes, or up-regulated genes, down-regulated genes, and tests whether specific pathways contain more genes than expected by chance. It is fast and straightforward.
+
+Example of Tools: Enrichr, clusterProfiler (enrichGO/enrichKEGG), gProfileR2
+
+- **Gene Set Enrichment Analysis (GSEA)**: It uses the entire ranked gene list (no DE cutoff) and detects subtle but coordinated changes in pathways. It is often more biologically informative.
+
+Example of Tools: GSEA, fgsea, clusterProfiler (gseGO/gseKEGG).
+
+Both approaches use Curated Gene Sets such as 
+
+- GO (Gene Ontology) — biological processes (BP), molecular functions (MF), cellular components (Cc).
+
+- KEGG — metabolic and signaling pathways.
+
+- Reactome — curated molecular pathways.
+
+- MSigDB — hallmark and curated gene sets.
+
+### Gene Ontology Enrichment Analysis
+
+In this example, we will perform GO enrichment using the list of up-regulated and down-regulated genes separately. However the same analysis can be done also with the list of DE genes.
+
+```{r,echo=TRUE}
+# Get significant upregulated genes
+sig_up_genes <- rownames(res_df[res_df$log2FoldChange > 0 & res_df$padj < 0.05, ])
+sig_up_entrez <- na.omit(res_df$entrez[rownames(res_df) %in% sig_up_genes]) ##remove those with NA in the entrezID 
+
+  # Get significant downregulated genes
+sig_down_genes <- rownames(res_df[res_df$log2FoldChange < 0 & res_df$padj < 0.05, ])
+sig_down_entrez <- na.omit(res_df$entrez[rownames(res_df) %in% sig_down_genes]) ##remove those with NA in the entrezID 
+```
+
+Note in the GO, there are different types of Ontologies. You must choose the one you are interested in. Here, we used the Biological Process as an example.
+
+```{r,echo=TRUE,warning=FALSE}
+ego_up <- enrichGO(gene = sig_up_entrez,
+                     OrgDb = org.Hs.eg.db,
+                     keyType = "ENTREZID",
+                     ont = "BP",  # Biological Process
+                     pAdjustMethod = "BH",
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.2)
+
+barplot(ego_up, showCategory = 10, title = "GO Enrichment: Upregulated Genes")
+  
+dotplot(ego_up, showCategory = 10, title = "GO Enrichment: Upregulated Genes")
+  
+ego_down <- enrichGO(gene = sig_down_entrez,
+                       OrgDb = org.Hs.eg.db,
+                       keyType = "ENTREZID",
+                       ont = "BP", # Biological Process
+                       pAdjustMethod = "BH",
+                       pvalueCutoff = 0.05,
+                       qvalueCutoff = 0.2)
+ 
+dotplot(ego_down, showCategory = 10, title = "GO Enrichment: Downregulated Genes")
+```
+
+### Kegg Pathway Analysis
+
+In this example, we will perform KEGG enrichment using the list of up-regulated and down-regulated genes separately. 
+
+```{r,echo=TRUE,message=FALSE}
+# need ENTREZ gene ids and sometimes organism code e.g. "hsa"
+ekegg_up <- enrichKEGG(gene = sig_up_entrez, organism = 'hsa', pvalueCutoff=0.05)
+dotplot(ekegg_up, showCategory=10)
+
+ekegg_dw <- enrichKEGG(gene = sig_down_entrez, organism = 'hsa', pvalueCutoff=0.05)
+dotplot(ekegg_dw, showCategory=10)
+```
+
+### GSEA (optional)
+
+To perform GSEA with DESeq2 results, you need to generate a **ranked list of genes** based on the DESeq2 output, typically  using the log2 fold change, the stats, the sign(log2FoldChange) * -log10(pvalue), or other metric, and then use this list as input for GSEA software or packages like clusterProfiler. 
+
+You also need to create a list of pathways to test. The MSigDB Hallmark gene sets can be retrieved and prepared using the *msigdbr()* function.
+
+```{r,echo=TRUE,warning=FALSE}
+res_clean <- res_df %>%
+  filter(!is.na(symbol), !is.na(stat))
+
+# Keep only rows with symbol and stat
+res_unique <- res_clean %>%
+  group_by(symbol) %>%
+  slice_max(order_by = abs(stat), n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+#Build the ranked list for GSEA
+ranked <- res_unique %>% arrange(desc(stat))
+ranks <- ranked$stat
+names(ranks) <- ranked$symbol
+```
+
+Build the list of pathways to test
+
+```{r,echo=TRUE,warning=FALSE}
+##  Load MSigDB Hallmark gene sets via msigdbr
+msig <- msigdbr(species = "Homo sapiens", collection = "H") %>%
+  select(gs_name, gene_symbol)
+
+term2gene <- msig %>% select(gs_name, gene_symbol)
+```
+
+run GSEA using clusterProfiler::GSEA
+
+```{r,echo=TRUE,warning=FALSE}
+gsea_cp <- GSEA(
+  geneList = ranks,
+  TERM2GENE = term2gene,
+  pvalueCutoff = 1,
+  verbose = FALSE
+)
+
+dotplot(gsea_cp, showCategory = 10)
+gseaplot(gsea_cp, geneSetID = "HALLMARK_TNFA_SIGNALING_VIA_NFKB")
+ridgeplot(gsea_cp, showCategory = 10)
+```
+
+
+## QUESTION TIME
+
+- Do you have any questions or comments?
+
+- Report your experience.
+
+## EXERCISES
+
+1. Try different choices for the pathway analysis by providing the list of DE genes.   
+
+2. Repeat the above analysis, including the cell type in the formula. Hint: use
+*dds <- DESeqDataSet(airway, design = ~  cell+dex)*
+
+3. Try to find some raw data from a paper of your interest with a GEO accession number. Try importing the data into R and running a basic analysis.
+
+
+## Acknowledgments
+
+- This tutorial presented at BBCC 2025 (https://www.bbcc-meetings.it/bbcc2025/) is part of the dissemination activities  supported by the P2022BLN38 project *Computational approaches for the integration of multi-omics data* – funded by European Union – Next Generation EU within the PRIN 2022 PNRR program (D.D. 1409 del 14/09/2022 Ministero dell’Università e della Ricerca) CUP B53D23027810001.
+
+
+
+
+
+```{r}
+sessionInfo()
+```
+
