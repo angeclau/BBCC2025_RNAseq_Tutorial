@@ -17,11 +17,11 @@
 
 After providing a general overview of bulk RNA-seq data and analysis, this practical tutorial will focus 
 
- * Quality control, Normalization, Batch correction,  
+* Quality control, Normalization, Batch correction,  
 
- * Differential Expression (DE) Analysis,
+* Differential Expression (DE) Analysis,
  
- * Functional Enrichment and Pathway Analysis, using R and Bioconductor packages. 
+* Functional Enrichment and Pathway Analysis, using R and Bioconductor packages. 
 
 In particular, we will use DESeq2 for differential expression analysis, which is one of the most popular and robust methods for RNA-seq analysis.
 
@@ -29,54 +29,57 @@ In particular, we will use DESeq2 for differential expression analysis, which is
 
 1.    **Introduction** 
 
- -    What are bulk RNA-seq data? 
- -    An overview of the RNA-seq workflow 
+* What are bulk RNA-seq data?
+* An overview of the RNA-seq workflow 
 
 2.    **Data Import & Preprocessing**
 
- -   Import count matrix & metadata
+* Import count matrix & metadata
 
 3.   **QC & Exploratory Data Analysis**
    
- -   Summary statistics, library sizes, PCA, and hierarchical clustering, 
- -     Visualization 
+* Summary statistics, library sizes, PCA, and hierarchical clustering, 
+* Visualization 
 
 4.    **Data Normalization**
 
- -    The need for normalization
- -    Normalization strategies using DESeq2 (i.e., variance stabilizing transformation (VST) or rlog transformation)
- -     Post-normalization QC:
+* The need for normalization
+* Normalization strategies using DESeq2 (i.e., variance stabilizing transformation (VST) or rlog transformation)
+* Post-normalization QC:
 
 5.    **Differential Expression Analysis**
 
- -    Statistical Model Setup: Experimental design formula (e.g., ~ condition)
- -    Run Differential Expression Using DESeq2 
+* Statistical Model Setup: Experimental design formula (e.g., ~ condition)
+* Run Differential Expression Using DESeq2 
 
 6.    **Results Extraction: Log2 fold changes, adjusted p-values**
 
- -    Visualization: MA plot, Volcano plot, Heatmap of top DE genes.
+* Visualization: MA plot, Volcano plot, Heatmap of top DE genes.
 
 7.    **Functional Enrichment Analysis**
 
- -   Gene Ontology (GO) and Pathway Analysis clusterProfiler for GO/KEGG enrichment
- -    Visualization
+* Gene Ontology (GO) and Pathway Analysis clusterProfiler for GO/KEGG enrichment
+* Visualization
 
 8. **Question time**
 
 9. **Exercises**
 
 ## To do before coming 
-List of things to do before attending the tutorial
+List of things to do before attending the tutorial:
+
 1.    Install R (https://www.r-project.org)
+
 2.    R Studio (https://posit.co/download/rstudio-desktop/)
+
 3.    List of packages to install:
 
 From CRAN (https://cran.r-project.org/)
 
--install.packages("ggplot2")
--install.packages("dplyr")
--install.packages("pheatmap")
--install.packages("RColorBrewer")
+- install.packages("ggplot2")
+- install.packages("dplyr")
+- install.packages("pheatmap")
+- install.packages("RColorBrewer")
 
 From Bioconductor (https://www.bioconductor.org/)
 
