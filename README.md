@@ -8,10 +8,12 @@
 
 ## Tutors
 * Olga Lanzetta<sup>1,2<sup>
+* Maura Mecchi<sup>3<sup>
 * Eva Luna Tarallo<sup>1<sup>
 
 1 Istituto per le Applicazioni del Calcolo "M. Picone", IAC-CNR, Naples, Italy\
 2 Dipartimento di Medicina Sperimentale - DIMES, Università degli Studi di Genova Italy\
+3 Università degli Studi della Basilicata\
 
 ## Description
 
@@ -24,6 +26,10 @@ After providing a general overview of bulk RNA-seq data and analysis, this pract
 * Functional Enrichment and Pathway Analysis, using R and Bioconductor packages. 
 
 In particular, we will use DESeq2 for differential expression analysis, which is one of the most popular and robust methods for RNA-seq analysis.
+
+## When
+
+The tutorial will be given on December 3rd, 2025 in occasion of the Bioinformatics and Computational Biology Conference (BBCC2025)
 
 ## Detailed program 
 
