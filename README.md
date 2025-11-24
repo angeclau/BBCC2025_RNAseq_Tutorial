@@ -27,9 +27,9 @@ After providing a general overview of bulk RNA-seq data and analysis, this pract
 
 In particular, we will use DESeq2 for differential expression analysis, which is one of the most popular and robust methods for RNA-seq analysis.
 
-## When
+## When and Where
 
-The tutorial will be given on December 3rd, 2025 in occasion of the Bioinformatics and Computational Biology Conference (BBCC2025)
+The tutorial will be held on December 3rd, 2025, from 9:00 to 14:00 on the occasion of the Bioinformatics and Computational Biology Conference (BBCC2025), Complesso di Sant'Andrea delle Dame in Naples.
 
 ## Detailed program 
 
