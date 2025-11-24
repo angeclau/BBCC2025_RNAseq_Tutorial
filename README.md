@@ -13,7 +13,7 @@
 
 1 Istituto per le Applicazioni del Calcolo "M. Picone", IAC-CNR, Naples, Italy\
 2 Dipartimento di Medicina Sperimentale - DIMES, Università degli Studi di Genova Italy\
-3 Università degli Studi della Basilicata\
+3 Università degli Studi della Basilicata
 
 ## Description
 
