@@ -28,28 +28,42 @@ In particular, we will use DESeq2 for differential expression analysis, which is
 ## Detailed program 
 
 1.    **Introduction** 
+
  -    What are bulk RNA-seq data? 
  -    An overview of the RNA-seq workflow 
+
 2.    **Data Import & Preprocessing**
+
  -   Import count matrix & metadata
+
 3.   **QC & Exploratory Data Analysis**
+   
  -   Summary statistics, library sizes, PCA, and hierarchical clustering, 
  -     Visualization 
+
 4.    **Data Normalization**
+
  -    The need for normalization
  -    Normalization strategies using DESeq2 (i.e., variance stabilizing transformation (VST) or rlog transformation)
  -     Post-normalization QC:
+
 5.    **Differential Expression Analysis**
+
  -    Statistical Model Setup: Experimental design formula (e.g., ~ condition)
  -    Run Differential Expression Using DESeq2 
-6.    **Results Extraction: Log2 fold changes, adjusted p-values**
- -    Visualization: MA plot, Volcano plot, Heatmap of top DE genes,
-7.    **Functional Enrichment Analysis**
- -   Gene Ontology (GO) and Pathway Analysis clusterProfiler for GO/KEGG enrichment
- *-    Visualization
-8. **Question time**
-9. **Exercises**
 
+6.    **Results Extraction: Log2 fold changes, adjusted p-values**
+
+ -    Visualization: MA plot, Volcano plot, Heatmap of top DE genes.
+
+7.    **Functional Enrichment Analysis**
+
+ -   Gene Ontology (GO) and Pathway Analysis clusterProfiler for GO/KEGG enrichment
+ -    Visualization
+
+8. **Question time**
+
+9. **Exercises**
 
 ## To do before coming 
 List of things to do before attending the tutorial
