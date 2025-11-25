@@ -102,6 +102,11 @@ BiocManager::install(version = "3.22")
 - BiocManager::install("msigdbr")
 - BiocManager::install("airway") ## For the example dataset 
 
+## Tutorial Page
+
+Link to material:
+
+https://angeclau.github.io/BBCC2025_RNAseq_Tutorial/
 
 ## Acknowledgments
 
