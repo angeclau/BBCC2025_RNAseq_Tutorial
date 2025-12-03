@@ -5,11 +5,11 @@ author: "| \n| Claudia Angelini \n|\n| Istituto per le Applicazioni del Calcolo 
   Picone\"\n| Consiglio Nazionale delle Ricerche\n"
 date: "2025-12-03"
 output:
+  pdf_document:
+    toc: true
   html_document:
     toc: true
     toc_float: true
-  pdf_document:
-    toc: true
 ---
 
 ```{r setup, include=FALSE}
@@ -85,8 +85,10 @@ For more information about the DESeq2 analysis, see https://bioconductor.org/pac
   library(AnnotationDbi)
   library(org.Hs.eg.db)
   library(clusterProfiler)
+  library(msigdbr)  
   library(apeglm)
-  library(msigdbr)
+  library(ashr)
+  
 ```
 
 ## READ THE DATA
@@ -161,7 +163,9 @@ There are different ways to define a design formula.
 - Example (batch correction): *~ batch + condition*: Analyzes the difference between groups defined by the condition variable while correcting for some batch variables.
 
 More complex formulas can be defined for experiments involving multiple factors.  
-For more information you can look at *Law et al 2020* (https://doi.org/10.12688/f1000research.27893.1).
+For more information on how you can create design matrices for gene expression experiments,
+you can look at *Law et al 2020* "A guide to creating design matrices for gene expression experiments"
+ (https://doi.org/10.12688/f1000research.27893.1).
 
 
 ### Define the design matrix or formula:
@@ -186,10 +190,13 @@ The **DESeqDataSet** object contains all information about the experimental setu
 - *colData(dds)* displays the experimental setup (i.e., the metadata associated with the samples).
 
 ```{r,echo=TRUE}
-# set the reference level
 colData$dex <- relevel(colData$dex, ref = "untrt")  # Set untreated as reference
+
 ## create the DESeqDataSet object
-dds <- DESeqDataSet(airway, design = ~  dex)
+#dds <- DESeqDataSet(airway, design = ~  dex)
+# 
+dds <- DESeqDataSetFromMatrix(countData,colData, design = ~  dex)
+
 dds
 ```
 
