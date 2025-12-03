@@ -29,7 +29,9 @@ In particular, we will use DESeq2 for differential expression analysis, which is
 
 ## When and Where
 
-The tutorial will be held on December 3rd, 2025, from 9:00 to 14:00 on the occasion of the Bioinformatics and Computational Biology Conference (BBCC2025), Complesso di Sant'Andrea delle Dame in Naples.
+The tutorial will be held on **December 3rd, 2025*, from 9:00 to 14:00 on the occasion of the Bioinformatics and Computational Biology Conference (BBCC2025), Complesso di Sant'Andrea delle Dame in Naples.
+
+Additional Question time and exercise discussion is scheduled on **December 10, 2025*, from 10:00 to 12:00. Send an email to get the invitation link.
 
 ## Detailed program 
 
